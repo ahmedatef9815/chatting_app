@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 User loggedInUser;
+final _firestore = FirebaseFirestore.instance;
 
 class ChatScreen extends StatefulWidget {
   static String id = 'chat_screen';
@@ -13,7 +14,6 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
   String messageText; //de el message elly el user ktabha 3shan yb3tha
@@ -56,9 +56,7 @@ class _ChatScreenState extends State<ChatScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            MessagesStream(
-              firestore: _firestore,
-            ),
+            MessagesStream(),
             Container(
               decoration: kMessageContainerDecoration,
               child: Row(
@@ -73,12 +71,13 @@ class _ChatScreenState extends State<ChatScreen> {
                       decoration: kMessageTextFieldDecoration,
                     ),
                   ),
-                  FlatButton(
+                  TextButton(
                     onPressed: () {
                       messageEditingController.clear();
                       _firestore.collection('messages').add({
                         'text': messageText,
                         'sender': loggedInUser.email,
+                        'time': FieldValue.serverTimestamp(),
                       });
                     },
                     child: Text(
@@ -97,13 +96,13 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 
 class MessagesStream extends StatelessWidget {
-  final firestore;
-  MessagesStream({this.firestore});
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: firestore.collection('messages').snapshots(),
+      stream: _firestore
+          .collection('messages')
+          .orderBy('time', descending: false)
+          .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return Center(
@@ -117,12 +116,14 @@ class MessagesStream extends StatelessWidget {
         for (var message in messages) {
           final messageText = message.get('text');
           final messageSender = message.get('sender');
+          final messageTime = message.get('time') as Timestamp;
           final currentUser = loggedInUser;
 
           final messageBubble = MessageBubble(
             text: messageText,
             sender: messageSender,
             isMe: currentUser == loggedInUser,
+            time: messageTime,
           );
           messageBubbles.add(messageBubble);
         }
@@ -145,7 +146,8 @@ class MessageBubble extends StatelessWidget {
   final String sender;
   final String text;
   final bool isMe;
-  MessageBubble({this.text, this.sender, this.isMe});
+  final Timestamp time;
+  MessageBubble({this.text, this.sender, this.isMe, this.time});
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +158,7 @@ class MessageBubble extends StatelessWidget {
             isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           Text(
-            sender,
+            ' $sender ${DateTime.fromMillisecondsSinceEpoch(time.seconds * 1000)}',
             style: TextStyle(
               fontSize: 12.0,
               color: Colors.black54,
